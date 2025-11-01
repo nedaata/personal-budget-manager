@@ -9,10 +9,10 @@ st.set_page_config(
     page_title="مدير الميزانية - الدينار الليبي",
     page_icon="💵",
     layout="wide",
-    initial_sidebar_state="collapsed"  # إضافة هذه السطر
+    initial_sidebar_state="collapsed"
 )
 
-# تهيئة session state بشكل آمن
+# تهيئة session state بشكل آمل
 def initialize_session_state():
     required_keys = {
         'current_user_id': None,
@@ -273,8 +273,8 @@ def show_login_screen():
                         if success:
                             st.success("🎉 تم إنشاء حسابك بنجاح!")
                             st.balloons()
-                            # استخدام st.experimental_rerun() بدلاً من st.rerun()
-                            st.experimental_rerun()
+                            # استخدام st.rerun() بدلاً من st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error("❌ فشل في إنشاء الحساب، حاول مرة أخرى")
     
@@ -329,7 +329,7 @@ def show_login_screen():
                         st.session_state.login_attempts = 0
                         
                         st.success(f"✅ تم تسجيل الدخول بنجاح! أهلاً بك {username.strip()}")
-                        st.experimental_rerun()
+                        st.rerun()
                 else:
                     st.session_state.login_attempts += 1
                     remaining_attempts = 5 - st.session_state.login_attempts
@@ -396,7 +396,7 @@ def show_main_app():
                         else:
                             st.info("💾 البيانات محفوظة محلياً")
                     
-                    st.experimental_rerun()
+                    st.rerun()
                 else:
                     st.error("❌ يرجى إدخال المبلغ والوصف")
         
@@ -408,7 +408,7 @@ def show_main_app():
             st.session_state.الرصيد = 0.0
             if update_user_data(st.session_state.current_user_id, 0.0, []):
                 st.success("✅ تم مسح جميع بياناتك")
-            st.experimental_rerun()
+            st.rerun()
         
         if st.button("🔐 تسجيل خروج", use_container_width=True, key="logout"):
             # إعادة تعيين الجلسة بشكل آمن
@@ -416,7 +416,7 @@ def show_main_app():
                 del st.session_state[key]
             initialize_session_state()
             st.success("✅ تم تسجيل الخروج بنجاح")
-            st.experimental_rerun()
+            st.rerun()
 
     # الإحصائيات
     إجمالي_الدخل = sum(trans['المبلغ'] for trans in st.session_state.المعاملات if trans['النوع'] == 'دخل')
@@ -472,7 +472,7 @@ def main():
         st.error(f"حدث خطأ غير متوقع: {e}")
         st.info("جاري إعادة تحميل التطبيق...")
         initialize_session_state()
-        st.experimental_rerun()
+        st.rerun()
 
 if __name__ == "__main__":
     main()
