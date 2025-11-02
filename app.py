@@ -233,11 +233,11 @@ def show_main_app():
         </div>
         <div class='stat-card'>
             <h3>💰 إجمالي الدخل</h3>
-            <h2 style='color: #28a745;'>+{stats['total_income']:,.2f} د.ل</h2>
+            <h2 style='color: #28a745;'>{stats['total_income']:,.2f} د.ل</h2>
         </div>
         <div class='stat-card'>
             <h3>💸 إجمالي المصروف</h3>
-            <h2 style='color: #dc3545;'>-{stats['total_expenses']:,.2f} د.ل</h2>
+            <h2 style='color: #dc3545;'>{stats['total_expenses']:,.2f} د.ل</h2>
         </div>
     </div>
     """, unsafe_allow_html=True)
