@@ -20,13 +20,14 @@ try:
     SUPABASE_URL = st.secrets["SUPABASE_URL"]
     SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
     supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    
+    # اختبار الاتصال بمحاولة جلب بيانات
+    supabase_client.table('users').select('*').limit(1).execute()
     supabase_connected = True
-    st.success("✅ متصل بـ Supabase")
 except Exception as e:
     supabase_connected = False
-    st.warning("⚠️ الوضع غير متصل - البيانات محفوظة محلياً فقط")
 
-# تهيئة قاعدة البيانات المحلية (كاحتياطي)
+# تهيئة قاعدة البيانات المحلية
 def init_database():
     conn = sqlite3.connect('budget_manager.db', check_same_thread=False)
     cursor = conn.cursor()
@@ -129,6 +130,22 @@ st.markdown("""
         padding: 12px;
         margin: 8px 0;
         border-radius: 8px;
+    }
+    .status-connected {
+        background: #d4edda;
+        color: #155724;
+        padding: 10px;
+        border-radius: 5px;
+        text-align: center;
+        margin: 10px 0;
+    }
+    .status-local {
+        background: #fff3cd;
+        color: #856404;
+        padding: 10px;
+        border-radius: 5px;
+        text-align: center;
+        margin: 10px 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -345,16 +362,13 @@ def add_transaction(user_id, transaction_type, amount, description, category):
             supabase_client.table('transactions').insert(transaction_data).execute()
             
             # تحديث الرصيد
-            if transaction_type == "دخل":
-                supabase_client.table('users')\
-                    .update({'balance': get_user_balance(user_id) + amount})\
-                    .eq('user_id', user_id)\
-                    .execute()
-            else:
-                supabase_client.table('users')\
-                    .update({'balance': get_user_balance(user_id) - amount})\
-                    .eq('user_id', user_id)\
-                    .execute()
+            current_balance = get_user_balance(user_id)
+            new_balance = current_balance + amount if transaction_type == "دخل" else current_balance - amount
+            
+            supabase_client.table('users')\
+                .update({'balance': new_balance})\
+                .eq('user_id', user_id)\
+                .execute()
             
             return True
         except Exception as e:
@@ -430,15 +444,16 @@ def delete_all_user_data(user_id):
             st.error(f"خطأ في حذف البيانات: {e}")
             return False
 
-# باقي الكود (show_login_screen, show_main_app, main) يبقى كما هو...
-
 def show_login_screen():
     """شاشة تسجيل الدخول"""
     st.markdown("<h1 class='main-header'>🌐 مدير الميزانية الشخصية</h1>", unsafe_allow_html=True)
     
+    # عرض حالة الاتصال
     if supabase_connected:
-        st.markdown("<h3 style='text-align: center; color: #A23B72;'>☁️ نظام سحابي متكامل</h3>", unsafe_allow_html=True)
+        st.markdown("<div class='status-connected'>☁️ متصل بالسحابة - بياناتك آمنة ومتاحة من أي جهاز</div>", unsafe_allow_html=True)
+        st.markdown("<h3 style='text-align: center; color: #A23B72;'>🔐 نظام سحابي متكامل</h3>", unsafe_allow_html=True)
     else:
+        st.markdown("<div class='status-local'>💾 وضع التخزين المحلي - البيانات محفوظة على جهازك فقط</div>", unsafe_allow_html=True)
         st.markdown("<h3 style='text-align: center; color: #A23B72;'>💾 نظام محلي آمن</h3>", unsafe_allow_html=True)
     
     # معلومات النظام
@@ -449,7 +464,8 @@ def show_login_screen():
             • بياناتك محفوظة في السحابة الآمنة<br>
             • الوصول لبياناتك من أي جهاز<br>
             • نسخ احتياطي تلقائي<br>
-            • أداء عالي واستقرار
+            • أداء عالي واستقرار<br>
+            • مزامنة فورية بين الأجهزة
         </div>
         """, unsafe_allow_html=True)
     else:
@@ -459,19 +475,262 @@ def show_login_screen():
             • بياناتك محفوظة على جهازك فقط<br>
             • خصوصية وأمان كامل<br>
             • عمل بدون اتصال إنترنت<br>
-            • سرعة عالية في الوصول
+            • سرعة عالية في الوصول<br>
+            • لا حاجة لاشتراك سحابي
         </div>
         """, unsafe_allow_html=True)
     
-    # باقي كود الشاشة يبقى كما هو...
-
-# الدوال show_main_app و main تبقى كما هي...
+    # تبويبات للتسجيل/الدخول
+    tab1, tab2 = st.tabs(["🚀 إنشاء حساب جديد", "🔐 تسجيل الدخول"])
+    
+    with tab1:
+        st.markdown("<div class='login-card'>", unsafe_allow_html=True)
+        st.markdown("### 🆕 إنشاء حساب جديد")
+        
+        with st.form("register_form"):
+            new_username = st.text_input(
+                "اسم المستخدم الجديد:",
+                placeholder="اختر اسم مستخدم فريد...",
+                help="هذا الاسم لا يمكن لأحد آخر استخدامه"
+            )
+            
+            new_password = st.text_input(
+                "كلمة المرور:",
+                type="password",
+                placeholder="كلمة مرور قوية...",
+                help="6 أحرف على الأقل، تحتوي على أحرف وأرقام"
+            )
+            
+            confirm_password = st.text_input(
+                "تأكيد كلمة المرور:",
+                type="password",
+                placeholder="أعد كتابة كلمة المرور..."
+            )
+            
+            register_button = st.form_submit_button(
+                "🎯 إنشاء حسابي الجديد",
+                use_container_width=True
+            )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        if register_button:
+            if not new_username.strip():
+                st.error("❌ يرجى إدخال اسم المستخدم")
+            elif not new_password:
+                st.error("❌ يرجى إدخال كلمة المرور")
+            elif new_password != confirm_password:
+                st.error("❌ كلمتا المرور غير متطابقتين")
+            else:
+                # التحقق من قوة كلمة المرور
+                is_valid, message = validate_password(new_password)
+                if not is_valid:
+                    st.error(message)
+                else:
+                    # التحقق من توفر اسم المستخدم
+                    if not check_username_available(new_username):
+                        st.error("❌ اسم المستخدم موجود مسبقاً، اختر اسماً آخر")
+                    else:
+                        # إنشاء الحساب
+                        user_id = create_user_id(new_username.strip())
+                        password_hash = hash_password(new_password)
+                        
+                        success = create_user_account(user_id, new_username.strip(), password_hash)
+                        
+                        if success:
+                            st.success("🎉 تم إنشاء حسابك بنجاح!")
+                            st.balloons()
+                            st.info("💡 انتقل لتبويب 'تسجيل الدخول' وأدخل بياناتك للبدء")
+                        else:
+                            st.error("❌ فشل في إنشاء الحساب، حاول مرة أخرى")
+    
+    with tab2:
+        st.markdown("<div class='login-card'>", unsafe_allow_html=True)
+        st.markdown("### 🔐 تسجيل الدخول لحسابك")
+        
+        with st.form("login_form"):
+            username = st.text_input(
+                "اسم المستخدم:",
+                placeholder="أدخل اسم المستخدم..."
+            )
+            
+            password = st.text_input(
+                "كلمة المرور:",
+                type="password",
+                placeholder="أدخل كلمة المرور..."
+            )
+            
+            login_button = st.form_submit_button(
+                "🚀 الدخول إلى حسابي",
+                use_container_width=True
+            )
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        if login_button:
+            if not username.strip() or not password:
+                st.error("❌ يرجى إدخال اسم المستخدم وكلمة المرور")
+            else:
+                is_valid, user_id = verify_password(username.strip(), password)
+                
+                if is_valid and user_id:
+                    # تسجيل الدخول الناجح
+                    st.session_state.current_user_id = user_id
+                    st.session_state.user_name = username.strip()
+                    st.session_state.الرصيد = get_user_balance(user_id)
+                    st.session_state.المعاملات = get_user_transactions(user_id)
+                    st.session_state.user_data_loaded = True
+                    st.session_state.login_attempts = 0
+                    
+                    st.success(f"✅ تم تسجيل الدخول بنجاح! أهلاً بك {username.strip()}")
+                    st.rerun()
+                else:
+                    st.session_state.login_attempts += 1
+                    remaining_attempts = 5 - st.session_state.login_attempts
+                    
+                    if st.session_state.login_attempts >= 5:
+                        st.error("🚫 تم تجاوز عدد المحاولات المسموح بها")
+                    else:
+                        st.error(f"❌ بيانات الدخول غير صحيحة. محاولات متبقية: {remaining_attempts}")
 
 def show_main_app():
-    # ... (نفس الكود السابق)
-    pass
+    """التطبيق الرئيسي بعد تسجيل الدخول"""
+    st.markdown("<h1 class='main-header'>🌐 مدير الميزانية الشخصية</h1>", unsafe_allow_html=True)
+    st.markdown(f"<h3 style='text-align: center; color: #A23B72;'>👤 أهلاً بك {st.session_state.user_name}</h3>", unsafe_allow_html=True)
+    
+    # عرض حالة التخزين
+    if supabase_connected:
+        st.markdown("<div class='status-connected'>☁️ التخزين السحابي مفعل - البيانات متاحة من أي جهاز</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='status-local'>💾 التخزين المحلي مفعل - البيانات محفوظة على هذا الجهاز فقط</div>", unsafe_allow_html=True)
+    
+    # بطاقة المستخدم
+    st.markdown(f"""
+    <div class="user-card">
+        <h3>👤 {st.session_state.user_name}</h3>
+        <p>🆔 المعرف: {st.session_state.current_user_id}</p>
+        <p>📊 {len(st.session_state.المعاملات)} معاملة محفوظة</p>
+        <p>{'☁️ البيانات محفوظة في السحابة' if supabase_connected else '💾 البيانات محفوظة محلياً'}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # الشريط الجانبي
+    with st.sidebar:
+        st.markdown("### 💰 معاملة جديدة")
+        
+        with st.form("transaction_form", clear_on_submit=True):
+            نوع = st.radio("النوع:", ["دخل 💵", "مصروف 💰"])
+            مبلغ = st.number_input("المبلغ (دينار ليبي):", min_value=0.0, value=0.0, step=1000.0)
+            وصف = st.text_input("وصف المعاملة:", placeholder="مثال: مرتب أو سوق")
+            
+            if نوع == "مصروف 💰":
+                فئة = st.selectbox("الفئة:", ["الطعام", "المواصلات", "الفواتير", "التسوق", "الترفيه", "الصحة", "أخرى"])
+            else:
+                فئة = "دخل"
+            
+            submitted = st.form_submit_button("💾 إضافة المعاملة", use_container_width=True)
+            
+            if submitted:
+                if مبلغ > 0 and وصف.strip():
+                    transaction_type = "دخل" if نوع == "دخل 💵" else "مصروف"
+                    
+                    success = add_transaction(
+                        st.session_state.current_user_id,
+                        transaction_type,
+                        مبلغ,
+                        وصف.strip(),
+                        فئة
+                    )
+                    
+                    if success:
+                        # تحديث البيانات المحلية
+                        st.session_state.الرصيد = get_user_balance(st.session_state.current_user_id)
+                        st.session_state.المعاملات = get_user_transactions(st.session_state.current_user_id)
+                        
+                        if transaction_type == "دخل":
+                            st.success(f"✅ تم إضافة دخل: {وصف} - {مبلغ:,.2f} د.ل")
+                        else:
+                            st.success(f"✅ تم إضافة مصروف: {وصف} - {مبلغ:,.2f} د.ل")
+                        
+                        st.rerun()
+                    else:
+                        st.error("❌ فشل في إضافة المعاملة")
+                else:
+                    st.error("❌ يرجى إدخال المبلغ والوصف")
+        
+        st.markdown("---")
+        st.markdown("### ⚙️ إدارة الحساب")
+        
+        if st.button("🔄 تحديث البيانات", use_container_width=True):
+            st.session_state.الرصيد = get_user_balance(st.session_state.current_user_id)
+            st.session_state.المعاملات = get_user_transactions(st.session_state.current_user_id)
+            st.success("✅ تم تحديث البيانات")
+            st.rerun()
+        
+        if st.button("🗑️ مسح جميع بياناتي", use_container_width=True):
+            if delete_all_user_data(st.session_state.current_user_id):
+                st.session_state.الرصيد = 0.0
+                st.session_state.المعاملات = []
+                st.success("✅ تم مسح جميع بياناتك")
+                st.rerun()
+            else:
+                st.error("❌ فشل في مسح البيانات")
+        
+        if st.button("🔐 تسجيل خروج", use_container_width=True):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.success("✅ تم تسجيل الخروج بنجاح")
+            st.rerun()
+
+    # الإحصائيات
+    إجمالي_الدخل = sum(trans['المبلغ'] for trans in st.session_state.المعاملات if trans['النوع'] == 'دخل')
+    إجمالي_المصروفات = sum(trans['المبلغ'] for trans in st.session_state.المعاملات if trans['النوع'] == 'مصروف')
+    صافي_الدخل = إجمالي_الدخل - إجمالي_المصروفات
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("💳 الرصيد الحالي", f"{st.session_state.الرصيد:,.2f} د.ل")
+    
+    with col2:
+        st.metric("💰 إجمالي الدخل", f"{إجمالي_الدخل:,.2f} د.ل")
+    
+    with col3:
+        st.metric("💸 إجمالي المصروفات", f"{إجمالي_المصروفات:,.2f} د.ل")
+    
+    with col4:
+        st.metric("📊 عدد المعاملات", f"{len(st.session_state.المعاملات)}")
+    
+    # سجل المعاملات
+    st.markdown("---")
+    st.markdown("### 📋 سجل المعاملات")
+    
+    if st.session_state.المعاملات:
+        for trans in st.session_state.المعاملات:
+            ايموجي = '💵' if trans['النوع'] == 'دخل' else '💰'
+            لون = 'transaction-income' if trans['النوع'] == 'دخل' else 'transaction-expense'
+            
+            st.markdown(f"""
+            <div class="{لون}">
+                <strong>{ايموجي} {trans['الوصف']}</strong><br>
+                <small>📅 {trans['التاريخ']} • 📁 {trans['الفئة']}</small>
+                <div style="text-align: right; font-weight: bold;">
+                    {trans['المبلغ']:,.2f} د.ل
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.info("""
+        ## 📝 لا توجد معاملات بعد
+        
+        **💡 ابدأ بإضافة معاملاتك:**
+        1. استخدم الشريط الجانبي لإضافة معاملة
+        2. بياناتك تحفظ تلقائياً في قاعدة البيانات
+        3. يمكنك العودة في أي وقت وستجد كل شيء محفوظ
+        """)
 
 def main():
+    """الدالة الرئيسية"""
     if not st.session_state.user_data_loaded or not st.session_state.current_user_id:
         show_login_screen()
     else:
