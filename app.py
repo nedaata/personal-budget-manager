@@ -3,10 +3,7 @@ from datetime import datetime
 import uuid
 import hashlib
 import re
-import sqlite3
-from supabase import create_client
-import os
-from contextlib import contextmanager
+from supabase import create_client, Client
 
 # إعداد الصفحة
 st.set_page_config(
@@ -15,57 +12,33 @@ st.set_page_config(
     layout="wide"
 )
 
+# تهيئة Supabase
+@st.cache_resource
+def init_supabase():
+    try:
+        supabase_client: Client = create_client(
+            st.secrets["SUPABASE_URL"],
+            st.secrets["SUPABASE_KEY"]
+        )
+        # اختبار الاتصال
+        supabase_client.table("users").select("count", count="exact").execute()
+        return supabase_client
+    except Exception as e:
+        st.error(f"❌ فشل في الاتصال بـ Supabase: {e}")
+        st.stop()
+
 # محاولة الاتصال بـ Supabase
 try:
-    SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-    supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-    
-    # اختبار الاتصال بمحاولة جلب بيانات
-    supabase_client.table('users').select('*').limit(1).execute()
-    supabase_connected = True
+    supabase = init_supabase()
+    st.sidebar.success("✅ متصل بـ Supabase")
 except Exception as e:
-    supabase_connected = False
-
-# تهيئة قاعدة البيانات المحلية
-def init_database():
-    conn = sqlite3.connect('budget_manager.db', check_same_thread=False)
-    cursor = conn.cursor()
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id TEXT PRIMARY KEY,
-            user_name TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            balance REAL DEFAULT 0.0,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_login TIMESTAMP
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS transactions (
-            id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            type TEXT NOT NULL,
-            amount REAL NOT NULL,
-            description TEXT NOT NULL,
-            category TEXT NOT NULL,
-            date TIMESTAMP NOT NULL,
-            FOREIGN KEY (user_id) REFERENCES users (user_id)
-        )
-    ''')
-    
-    conn.commit()
-    return conn
-
-@contextmanager
-def get_db_connection():
-    conn = sqlite3.connect('budget_manager.db', check_same_thread=False)
-    try:
-        yield conn
-    finally:
-        conn.close()
+    st.error("""
+    ❌ لا يمكن الاتصال بـ Supabase. تأكد من:
+    1. إعداد ملف secrets.toml بشكل صحيح
+    2. أن الجداول موجودة في Supabase
+    3. اتصال الإنترنت يعمل
+    """)
+    st.stop()
 
 # تهيئة session state
 if 'current_user_id' not in st.session_state:
@@ -81,71 +54,108 @@ if 'الرصيد' not in st.session_state:
 if 'المعاملات' not in st.session_state:
     st.session_state.المعاملات = []
 
-# تهيئة قاعدة البيانات المحلية
-init_database()
-
 # التصميم العربي
 st.markdown("""
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap');
+    
+    * {
+        font-family: 'Tajawal', sans-serif;
+    }
+    
     .main-header {
-        font-size: 2.5rem;
+        font-size: 3rem;
         color: #2E86AB;
         text-align: center;
         margin-bottom: 1rem;
+        font-weight: 800;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
     }
+    
     .login-card {
-        background: #f8f9fa;
-        padding: 30px;
-        border-radius: 15px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 40px;
+        border-radius: 20px;
         margin: 20px auto;
-        border: 2px solid #dee2e6;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
         max-width: 500px;
+        color: white;
     }
+    
     .security-alert {
-        background: #fff3cd;
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #ffc107;
-        color: #856404;
-        margin: 10px 0;
+        background: rgba(255, 255, 255, 0.9);
+        padding: 20px;
+        border-radius: 15px;
+        margin: 20px 0;
+        backdrop-filter: blur(10px);
+        border-left: 5px solid #ffc107;
     }
+    
     .user-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 20px;
-        border-radius: 10px;
-        margin: 10px 0;
+        padding: 25px;
+        border-radius: 15px;
+        margin: 15px 0;
         color: white;
         text-align: center;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
     }
+    
+    .metric-card {
+        background: white;
+        padding: 20px;
+        border-radius: 15px;
+        margin: 10px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        border-left: 5px solid #2E86AB;
+        text-align: center;
+    }
+    
     .transaction-income {
-        border-left: 4px solid #27ae60;
-        background: white;
-        padding: 12px;
-        margin: 8px 0;
-        border-radius: 8px;
+        background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+        color: white;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 10px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
     }
+    
     .transaction-expense {
-        border-left: 4px solid #e74c3c;
-        background: white;
-        padding: 12px;
-        margin: 8px 0;
-        border-radius: 8px;
+        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        color: white;
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 10px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
     }
-    .status-connected {
-        background: #d4edda;
-        color: #155724;
-        padding: 10px;
-        border-radius: 5px;
+    
+    .stButton button {
+        border-radius: 10px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    
+    .stButton button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+    
+    .status-cloud {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
         text-align: center;
         margin: 10px 0;
+        font-weight: bold;
     }
-    .status-local {
-        background: #fff3cd;
-        color: #856404;
-        padding: 10px;
-        border-radius: 5px;
+    
+    .empty-state {
         text-align: center;
-        margin: 10px 0;
+        padding: 40px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 15px;
+        color: white;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -173,342 +183,192 @@ def validate_password(password):
 
 def check_username_available(user_name):
     """التحقق إذا كان اسم المستخدم متاح"""
-    if supabase_connected:
-        # التحقق في Supabase
-        try:
-            response = supabase_client.table('users')\
-                .select('user_id')\
-                .eq('user_name', user_name.strip())\
-                .execute()
-            return len(response.data) == 0
-        except Exception as e:
-            st.error(f"خطأ في التحقق من اسم المستخدم في السحابة: {e}")
-            return False
-    else:
-        # التحقق في SQLite
-        try:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT user_id FROM users WHERE user_name = ?", (user_name.strip(),))
-                return cursor.fetchone() is None
-        except Exception as e:
-            st.error(f"خطأ في التحقق من اسم المستخدم: {e}")
-            return False
+    try:
+        response = supabase.table('users')\
+            .select('user_id')\
+            .eq('user_name', user_name.strip())\
+            .execute()
+        return len(response.data) == 0
+    except Exception as e:
+        st.error(f"خطأ في التحقق من اسم المستخدم: {e}")
+        return False
 
 def create_user_account(user_id, user_name, password_hash):
     """إنشاء حساب مستخدم جديد"""
-    if supabase_connected:
-        # استخدام Supabase
-        try:
-            user_data = {
-                'user_id': user_id,
-                'user_name': user_name.strip(),
-                'password_hash': password_hash,
-                'balance': 0.0,
-                'created_at': datetime.now().isoformat()
-            }
-            response = supabase_client.table('users').insert(user_data).execute()
+    try:
+        user_data = {
+            'user_id': user_id,
+            'user_name': user_name.strip(),
+            'password_hash': password_hash,
+            'balance': 0.0,
+            'created_at': datetime.now().isoformat()
+        }
+        response = supabase.table('users').insert(user_data).execute()
+        
+        if response.data:
             return True
-        except Exception as e:
-            st.error(f"خطأ في إنشاء الحساب على السحابة: {e}")
+        else:
+            st.error("فشل في إنشاء الحساب")
             return False
-    else:
-        # استخدام SQLite
-        try:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO users (user_id, user_name, password_hash, balance)
-                    VALUES (?, ?, ?, ?)
-                ''', (user_id, user_name.strip(), password_hash, 0.0))
-                conn.commit()
-                return True
-        except Exception as e:
-            st.error(f"خطأ في إنشاء الحساب: {e}")
-            return False
+    except Exception as e:
+        st.error(f"خطأ في إنشاء الحساب: {e}")
+        return False
 
 def verify_password(user_name, password):
     """التحقق من كلمة المرور"""
-    if supabase_connected:
-        # التحقق في Supabase
-        try:
-            response = supabase_client.table('users')\
-                .select('user_id, password_hash')\
-                .eq('user_name', user_name.strip())\
-                .execute()
-            
-            if response.data:
-                user_data = response.data[0]
-                stored_hash = user_data['password_hash']
-                user_id = user_data['user_id']
-                return stored_hash == hash_password(password), user_id
-            return False, None
-        except Exception as e:
-            st.error(f"خطأ في التحقق من كلمة المرور في السحابة: {e}")
-            return False, None
-    else:
-        # التحقق في SQLite
-        try:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT user_id, password_hash FROM users WHERE user_name = ?", 
-                    (user_name.strip(),)
-                )
-                result = cursor.fetchone()
-                
-                if result:
-                    user_id, stored_hash = result
-                    return stored_hash == hash_password(password), user_id
-                return False, None
-        except Exception as e:
-            st.error(f"خطأ في التحقق من كلمة المرور: {e}")
-            return False, None
+    try:
+        response = supabase.table('users')\
+            .select('user_id, password_hash')\
+            .eq('user_name', user_name.strip())\
+            .execute()
+        
+        if response.data:
+            user_data = response.data[0]
+            stored_hash = user_data['password_hash']
+            user_id = user_data['user_id']
+            return stored_hash == hash_password(password), user_id
+        return False, None
+    except Exception as e:
+        st.error(f"خطأ في التحقق من كلمة المرور: {e}")
+        return False, None
 
 def get_user_balance(user_id):
     """جلب رصيد المستخدم"""
-    if supabase_connected:
-        # جلب من Supabase
-        try:
-            response = supabase_client.table('users')\
-                .select('balance')\
-                .eq('user_id', user_id)\
-                .execute()
-            return response.data[0]['balance'] if response.data else 0.0
-        except Exception as e:
-            st.error(f"خطأ في جلب الرصيد من السحابة: {e}")
-            return 0.0
-    else:
-        # جلب من SQLite
-        try:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-                result = cursor.fetchone()
-                return result[0] if result else 0.0
-        except Exception as e:
-            st.error(f"خطأ في جلب الرصيد: {e}")
-            return 0.0
+    try:
+        response = supabase.table('users')\
+            .select('balance')\
+            .eq('user_id', user_id)\
+            .execute()
+        return response.data[0]['balance'] if response.data else 0.0
+    except Exception as e:
+        st.error(f"خطأ في جلب الرصيد: {e}")
+        return 0.0
 
 def get_user_transactions(user_id):
     """جلب معاملات المستخدم"""
-    if supabase_connected:
-        # جلب من Supabase
-        try:
-            response = supabase_client.table('transactions')\
-                .select('*')\
-                .eq('user_id', user_id)\
-                .order('date', desc=True)\
-                .execute()
-            
-            transactions = []
-            for row in response.data:
-                transactions.append({
-                    "id": row['id'],
-                    "النوع": row['type'],
-                    "المبلغ": row['amount'],
-                    "الوصف": row['description'],
-                    "الفئة": row['category'],
-                    "التاريخ": row['date']
-                })
-            return transactions
-        except Exception as e:
-            st.error(f"خطأ في جلب المعاملات من السحابة: {e}")
-            return []
-    else:
-        # جلب من SQLite
-        try:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    SELECT id, type, amount, description, category, date 
-                    FROM transactions 
-                    WHERE user_id = ? 
-                    ORDER BY date DESC
-                ''', (user_id,))
-                
-                transactions = []
-                for row in cursor.fetchall():
-                    transactions.append({
-                        "id": row[0],
-                        "النوع": row[1],
-                        "المبلغ": row[2],
-                        "الوصف": row[3],
-                        "الفئة": row[4],
-                        "التاريخ": row[5]
-                    })
-                return transactions
-        except Exception as e:
-            st.error(f"خطأ في جلب المعاملات: {e}")
-            return []
+    try:
+        response = supabase.table('transactions')\
+            .select('*')\
+            .eq('user_id', user_id)\
+            .order('date', desc=True)\
+            .execute()
+        
+        transactions = []
+        for row in response.data:
+            transactions.append({
+                "id": row['id'],
+                "النوع": row['type'],
+                "المبلغ": row['amount'],
+                "الوصف": row['description'],
+                "الفئة": row['category'],
+                "التاريخ": row['date']
+            })
+        return transactions
+    except Exception as e:
+        st.error(f"خطأ في جلب المعاملات: {e}")
+        return []
 
 def add_transaction(user_id, transaction_type, amount, description, category):
     """إضافة معاملة جديدة"""
-    if supabase_connected:
-        # إضافة إلى Supabase
-        try:
-            transaction_id = str(uuid.uuid4())[:8]
-            transaction_data = {
-                'id': transaction_id,
-                'user_id': user_id,
-                'type': transaction_type,
-                'amount': amount,
-                'description': description.strip(),
-                'category': category,
-                'date': datetime.now().isoformat()
-            }
-            
-            # إضافة المعاملة
-            supabase_client.table('transactions').insert(transaction_data).execute()
-            
-            # تحديث الرصيد
-            current_balance = get_user_balance(user_id)
-            new_balance = current_balance + amount if transaction_type == "دخل" else current_balance - amount
-            
-            supabase_client.table('users')\
-                .update({'balance': new_balance})\
-                .eq('user_id', user_id)\
-                .execute()
-            
-            return True
-        except Exception as e:
-            st.error(f"خطأ في إضافة المعاملة إلى السحابة: {e}")
-            return False
-    else:
-        # إضافة إلى SQLite
-        try:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                
-                # إضافة المعاملة
-                transaction_id = str(uuid.uuid4())[:8]
-                cursor.execute('''
-                    INSERT INTO transactions (id, user_id, type, amount, description, category, date)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (transaction_id, user_id, transaction_type, amount, description, category, datetime.now()))
-                
-                # تحديث رصيد المستخدم
-                if transaction_type == "دخل":
-                    cursor.execute(
-                        "UPDATE users SET balance = balance + ? WHERE user_id = ?",
-                        (amount, user_id)
-                    )
-                else:
-                    cursor.execute(
-                        "UPDATE users SET balance = balance - ? WHERE user_id = ?",
-                        (amount, user_id)
-                    )
-                
-                conn.commit()
-                return True
-        except Exception as e:
-            st.error(f"خطأ في إضافة المعاملة: {e}")
-            return False
+    try:
+        transaction_id = str(uuid.uuid4())[:8]
+        transaction_data = {
+            'id': transaction_id,
+            'user_id': user_id,
+            'type': transaction_type,
+            'amount': amount,
+            'description': description.strip(),
+            'category': category,
+            'date': datetime.now().isoformat()
+        }
+        
+        # إضافة المعاملة
+        supabase.table('transactions').insert(transaction_data).execute()
+        
+        # تحديث الرصيد
+        current_balance = get_user_balance(user_id)
+        new_balance = current_balance + amount if transaction_type == "دخل" else current_balance - amount
+        
+        supabase.table('users')\
+            .update({'balance': new_balance})\
+            .eq('user_id', user_id)\
+            .execute()
+        
+        return True
+    except Exception as e:
+        st.error(f"خطأ في إضافة المعاملة: {e}")
+        return False
 
 def delete_all_user_data(user_id):
     """حذف جميع بيانات المستخدم"""
-    if supabase_connected:
-        # حذف من Supabase
-        try:
-            # حذف المعاملات
-            supabase_client.table('transactions')\
-                .delete()\
-                .eq('user_id', user_id)\
-                .execute()
-            
-            # إعادة تعيين الرصيد
-            supabase_client.table('users')\
-                .update({'balance': 0.0})\
-                .eq('user_id', user_id)\
-                .execute()
-            
-            return True
-        except Exception as e:
-            st.error(f"خطأ في حذف البيانات من السحابة: {e}")
-            return False
-    else:
-        # حذف من SQLite
-        try:
-            with get_db_connection() as conn:
-                cursor = conn.cursor()
-                
-                # حذف جميع المعاملات
-                cursor.execute("DELETE FROM transactions WHERE user_id = ?", (user_id,))
-                
-                # إعادة تعيين الرصيد
-                cursor.execute("UPDATE users SET balance = 0.0 WHERE user_id = ?", (user_id,))
-                
-                conn.commit()
-                return True
-        except Exception as e:
-            st.error(f"خطأ في حذف البيانات: {e}")
-            return False
+    try:
+        # حذف جميع المعاملات
+        supabase.table('transactions')\
+            .delete()\
+            .eq('user_id', user_id)\
+            .execute()
+        
+        # إعادة تعيين الرصيد
+        supabase.table('users')\
+            .update({'balance': 0.0})\
+            .eq('user_id', user_id)\
+            .execute()
+        
+        return True
+    except Exception as e:
+        st.error(f"خطأ في حذف البيانات: {e}")
+        return False
 
 def show_login_screen():
     """شاشة تسجيل الدخول"""
     st.markdown("<h1 class='main-header'>🌐 مدير الميزانية الشخصية</h1>", unsafe_allow_html=True)
+    st.markdown("<h3 style='text-align: center; color: #A23B72;'>☁️ نظام سحابي متكامل</h3>", unsafe_allow_html=True)
     
-    # عرض حالة الاتصال
-    if supabase_connected:
-        st.markdown("<div class='status-connected'>☁️ متصل بالسحابة - بياناتك آمنة ومتاحة من أي جهاز</div>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align: center; color: #A23B72;'>🔐 نظام سحابي متكامل</h3>", unsafe_allow_html=True)
-    else:
-        st.markdown("<div class='status-local'>💾 وضع التخزين المحلي - البيانات محفوظة على جهازك فقط</div>", unsafe_allow_html=True)
-        st.markdown("<h3 style='text-align: center; color: #A23B72;'>💾 نظام محلي آمن</h3>", unsafe_allow_html=True)
+    # حالة النظام
+    st.markdown("<div class='status-cloud'>☁️ التطبيق يعمل على Supabase - بياناتك آمنة في السحابة</div>", unsafe_allow_html=True)
     
     # معلومات النظام
-    if supabase_connected:
-        st.markdown("""
-        <div class="security-alert">
-            <strong>🎯 المميزات السحابية:</strong><br>
-            • بياناتك محفوظة في السحابة الآمنة<br>
-            • الوصول لبياناتك من أي جهاز<br>
-            • نسخ احتياطي تلقائي<br>
-            • أداء عالي واستقرار<br>
-            • مزامنة فورية بين الأجهزة
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div class="security-alert">
-            <strong>🎯 المميزات المحلية:</strong><br>
-            • بياناتك محفوظة على جهازك فقط<br>
-            • خصوصية وأمان كامل<br>
-            • عمل بدون اتصال إنترنت<br>
-            • سرعة عالية في الوصول<br>
-            • لا حاجة لاشتراك سحابي
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown("""
+    <div class="security-alert">
+        <strong>🎯 مميزات النظام السحابي:</strong><br>
+        • بياناتك محفوظة في سحابة Supabase الآمنة<br>
+        • الوصول لبياناتك من أي جهاز في العالم<br>
+        • نسخ احتياطي تلقائي ومستمر<br>
+        • أداء عالي واستقرار 99.9%<br>
+        • مزامنة فورية بين جميع أجهزتك<br>
+        • أمان متقدم وحماية من الاختراق
+    </div>
+    """, unsafe_allow_html=True)
     
     # تبويبات للتسجيل/الدخول
     tab1, tab2 = st.tabs(["🚀 إنشاء حساب جديد", "🔐 تسجيل الدخول"])
     
     with tab1:
         st.markdown("<div class='login-card'>", unsafe_allow_html=True)
-        st.markdown("### 🆕 إنشاء حساب جديد")
+        st.markdown("<h3 style='color: white; text-align: center;'>🎯 انضم إلينا اليوم</h3>", unsafe_allow_html=True)
         
         with st.form("register_form"):
             new_username = st.text_input(
-                "اسم المستخدم الجديد:",
+                "👤 اسم المستخدم الجديد:",
                 placeholder="اختر اسم مستخدم فريد...",
                 help="هذا الاسم لا يمكن لأحد آخر استخدامه"
             )
             
             new_password = st.text_input(
-                "كلمة المرور:",
+                "🔒 كلمة المرور:",
                 type="password",
                 placeholder="كلمة مرور قوية...",
                 help="6 أحرف على الأقل، تحتوي على أحرف وأرقام"
             )
             
             confirm_password = st.text_input(
-                "تأكيد كلمة المرور:",
+                "✅ تأكيد كلمة المرور:",
                 type="password",
                 placeholder="أعد كتابة كلمة المرور..."
             )
             
             register_button = st.form_submit_button(
-                "🎯 إنشاء حسابي الجديد",
+                "🎉 إنشاء حسابي الجديد",
                 use_container_width=True
             )
         
@@ -540,22 +400,28 @@ def show_login_screen():
                         if success:
                             st.success("🎉 تم إنشاء حسابك بنجاح!")
                             st.balloons()
-                            st.info("💡 انتقل لتبويب 'تسجيل الدخول' وأدخل بياناتك للبدء")
+                            st.markdown("""
+                            <div style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); 
+                                        padding: 30px; border-radius: 15px; text-align: center; color: white; margin: 20px 0;">
+                                <h3>🎊 مرحباً بك في عائلتنا!</h3>
+                                <p>حسابك جاهز الآن. انتقل لتبويب تسجيل الدخول لبدء رحلتك المالية</p>
+                            </div>
+                            """, unsafe_allow_html=True)
                         else:
                             st.error("❌ فشل في إنشاء الحساب، حاول مرة أخرى")
     
     with tab2:
         st.markdown("<div class='login-card'>", unsafe_allow_html=True)
-        st.markdown("### 🔐 تسجيل الدخول لحسابك")
+        st.markdown("<h3 style='color: white; text-align: center;'>🔐 أهلاً بعودتك</h3>", unsafe_allow_html=True)
         
         with st.form("login_form"):
             username = st.text_input(
-                "اسم المستخدم:",
+                "👤 اسم المستخدم:",
                 placeholder="أدخل اسم المستخدم..."
             )
             
             password = st.text_input(
-                "كلمة المرور:",
+                "🔒 كلمة المرور:",
                 type="password",
                 placeholder="أدخل كلمة المرور..."
             )
@@ -598,21 +464,78 @@ def show_main_app():
     st.markdown("<h1 class='main-header'>🌐 مدير الميزانية الشخصية</h1>", unsafe_allow_html=True)
     st.markdown(f"<h3 style='text-align: center; color: #A23B72;'>👤 أهلاً بك {st.session_state.user_name}</h3>", unsafe_allow_html=True)
     
-    # عرض حالة التخزين
-    if supabase_connected:
-        st.markdown("<div class='status-connected'>☁️ التخزين السحابي مفعل - البيانات متاحة من أي جهاز</div>", unsafe_allow_html=True)
-    else:
-        st.markdown("<div class='status-local'>💾 التخزين المحلي مفعل - البيانات محفوظة على هذا الجهاز فقط</div>", unsafe_allow_html=True)
+    # حالة النظام
+    st.markdown("<div class='status-cloud'>☁️ متصل بـ Supabase - البيانات آمنة في السحابة</div>", unsafe_allow_html=True)
     
     # بطاقة المستخدم
-    st.markdown(f"""
-    <div class="user-card">
-        <h3>👤 {st.session_state.user_name}</h3>
-        <p>🆔 المعرف: {st.session_state.current_user_id}</p>
-        <p>📊 {len(st.session_state.المعاملات)} معاملة محفوظة</p>
-        <p>{'☁️ البيانات محفوظة في السحابة' if supabase_connected else '💾 البيانات محفوظة محلياً'}</p>
-    </div>
-    """, unsafe_allow_html=True)
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(f"""
+        <div class="user-card">
+            <h3>👤 {st.session_state.user_name}</h3>
+            <p>المستخدم النشط</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div class="user-card">
+            <h3>📊 {len(st.session_state.المعاملات)}</h3>
+            <p>معاملة محفوظة</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(f"""
+        <div class="user-card">
+            <h3>☁️ Supabase</h3>
+            <p>التخزين السحابي</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # الإحصائيات
+    st.markdown("---")
+    st.markdown("### 📈 الإحصائيات المالية")
+    
+    إجمالي_الدخل = sum(trans['المبلغ'] for trans in st.session_state.المعاملات if trans['النوع'] == 'دخل')
+    إجمالي_المصروفات = sum(trans['المبلغ'] for trans in st.session_state.المعاملات if trans['النوع'] == 'مصروف')
+    صافي_الدخل = إجمالي_الدخل - إجمالي_المصروفات
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card">
+            <h3>💳 {st.session_state.الرصيد:,.2f} د.ل</h3>
+            <p>الرصيد الحالي</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div class="metric-card">
+            <h3 style="color: #27ae60;">💰 {إجمالي_الدخل:,.2f} د.ل</h3>
+            <p>إجمالي الدخل</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(f"""
+        <div class="metric-card">
+            <h3 style="color: #e74c3c;">💸 {إجمالي_المصروفات:,.2f} د.ل</h3>
+            <p>إجمالي المصروفات</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col4:
+        color = "#27ae60" if صافي_الدخل >= 0 else "#e74c3c"
+        st.markdown(f"""
+        <div class="metric-card">
+            <h3 style="color: {color};">📊 {صافي_الدخل:,.2f} د.ل</h3>
+            <p>صافي الدخل</p>
+        </div>
+        """, unsafe_allow_html=True)
     
     # الشريط الجانبي
     with st.sidebar:
@@ -647,11 +570,7 @@ def show_main_app():
                         st.session_state.الرصيد = get_user_balance(st.session_state.current_user_id)
                         st.session_state.المعاملات = get_user_transactions(st.session_state.current_user_id)
                         
-                        if transaction_type == "دخل":
-                            st.success(f"✅ تم إضافة دخل: {وصف} - {مبلغ:,.2f} د.ل")
-                        else:
-                            st.success(f"✅ تم إضافة مصروف: {وصف} - {مبلغ:,.2f} د.ل")
-                        
+                        st.success(f"✅ تم إضافة {transaction_type}: {وصف} - {مبلغ:,.2f} د.ل")
                         st.rerun()
                     else:
                         st.error("❌ فشل في إضافة المعاملة")
@@ -664,70 +583,73 @@ def show_main_app():
         if st.button("🔄 تحديث البيانات", use_container_width=True):
             st.session_state.الرصيد = get_user_balance(st.session_state.current_user_id)
             st.session_state.المعاملات = get_user_transactions(st.session_state.current_user_id)
-            st.success("✅ تم تحديث البيانات")
+            st.success("✅ تم تحديث البيانات من السحابة")
             st.rerun()
         
         if st.button("🗑️ مسح جميع بياناتي", use_container_width=True):
-            if delete_all_user_data(st.session_state.current_user_id):
-                st.session_state.الرصيد = 0.0
-                st.session_state.المعاملات = []
-                st.success("✅ تم مسح جميع بياناتك")
-                st.rerun()
-            else:
-                st.error("❌ فشل في مسح البيانات")
+            if st.checkbox("⚠️ تأكيد المسح - هذه العملية لا يمكن التراجع عنها"):
+                if delete_all_user_data(st.session_state.current_user_id):
+                    st.session_state.الرصيد = 0.0
+                    st.session_state.المعاملات = []
+                    st.success("✅ تم مسح جميع بياناتك من السحابة")
+                    st.rerun()
+                else:
+                    st.error("❌ فشل في مسح البيانات")
         
         if st.button("🔐 تسجيل خروج", use_container_width=True):
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.success("✅ تم تسجيل الخروج بنجاح")
             st.rerun()
-
-    # الإحصائيات
-    إجمالي_الدخل = sum(trans['المبلغ'] for trans in st.session_state.المعاملات if trans['النوع'] == 'دخل')
-    إجمالي_المصروفات = sum(trans['المبلغ'] for trans in st.session_state.المعاملات if trans['النوع'] == 'مصروف')
-    صافي_الدخل = إجمالي_الدخل - إجمالي_المصروفات
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("💳 الرصيد الحالي", f"{st.session_state.الرصيد:,.2f} د.ل")
-    
-    with col2:
-        st.metric("💰 إجمالي الدخل", f"{إجمالي_الدخل:,.2f} د.ل")
-    
-    with col3:
-        st.metric("💸 إجمالي المصروفات", f"{إجمالي_المصروفات:,.2f} د.ل")
-    
-    with col4:
-        st.metric("📊 عدد المعاملات", f"{len(st.session_state.المعاملات)}")
     
     # سجل المعاملات
     st.markdown("---")
-    st.markdown("### 📋 سجل المعاملات")
+    st.markdown("### 📋 سجل المعاملات الحديثة")
     
     if st.session_state.المعاملات:
-        for trans in st.session_state.المعاملات:
-            ايموجي = '💵' if trans['النوع'] == 'دخل' else '💰'
-            لون = 'transaction-income' if trans['النوع'] == 'دخل' else 'transaction-expense'
-            
-            st.markdown(f"""
-            <div class="{لون}">
-                <strong>{ايموجي} {trans['الوصف']}</strong><br>
-                <small>📅 {trans['التاريخ']} • 📁 {trans['الفئة']}</small>
-                <div style="text-align: right; font-weight: bold;">
-                    {trans['المبلغ']:,.2f} د.ل
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.info("""
-        ## 📝 لا توجد معاملات بعد
+        # عرض آخر 10 معاملات فقط
+        recent_transactions = st.session_state.المعاملات[:10]
         
-        **💡 ابدأ بإضافة معاملاتك:**
-        1. استخدم الشريط الجانبي لإضافة معاملة
-        2. بياناتك تحفظ تلقائياً في قاعدة البيانات
-        3. يمكنك العودة في أي وقت وستجد كل شيء محفوظ
-        """)
+        for trans in recent_transactions:
+            if trans['النوع'] == 'دخل':
+                st.markdown(f"""
+                <div class="transaction-income">
+                    <div style="display: flex; justify-content: between; align-items: center;">
+                        <div style="flex: 1;">
+                            <h4 style="margin: 0;">💵 {trans['الوصف']}</h4>
+                            <small>📅 {trans['التاريخ']} • 📁 {trans['الفئة']}</small>
+                        </div>
+                        <div style="text-align: right;">
+                            <h3 style="margin: 0;">+{trans['المبلغ']:,.2f} د.ل</h3>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class="transaction-expense">
+                    <div style="display: flex; justify-content: between; align-items: center;">
+                        <div style="flex: 1;">
+                            <h4 style="margin: 0;">💰 {trans['الوصف']}</h4>
+                            <small>📅 {trans['التاريخ']} • 📁 {trans['الفئة']}</small>
+                        </div>
+                        <div style="text-align: right;">
+                            <h3 style="margin: 0;">-{trans['المبلغ']:,.2f} د.ل</h3>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        if len(st.session_state.المعاملات) > 10:
+            st.info(f"📖 عرض {len(recent_transactions)} من أصل {len(st.session_state.المعاملات)} معاملة.")
+    else:
+        st.markdown("""
+        <div class="empty-state">
+            <h3>📝 لا توجد معاملات بعد</h3>
+            <p>ابدأ رحلتك المالية بإضافة أول معاملة لك باستخدام النموذج في الشريط الجانبي</p>
+            <div style="font-size: 4rem; margin-top: 20px;">💸</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 def main():
     """الدالة الرئيسية"""
