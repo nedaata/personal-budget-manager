@@ -46,13 +46,20 @@ st.markdown("""
         font-size: 2.5rem;
         margin-bottom: 2rem;
     }
-    .balance-card {
-        background: #f8f9fa;
+    .stats-container {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        margin: 20px 0;
+    }
+    .stat-card {
+        flex: 1;
+        background: white;
         padding: 20px;
         border-radius: 10px;
         text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         border: 2px solid #dee2e6;
-        margin: 10px 0;
     }
     .transaction-income {
         background: #d4edda;
@@ -67,14 +74,6 @@ st.markdown("""
         margin: 5px 0;
         border-radius: 5px;
         border-right: 4px solid #dc3545;
-    }
-    .stats-card {
-        background: white;
-        padding: 15px;
-        border-radius: 10px;
-        text-align: center;
-        margin: 5px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -107,7 +106,8 @@ def create_user(username, password):
         
         supabase.table('users').insert(user_data).execute()
         return user_id
-    except:
+    except Exception as e:
+        st.error(f"خطأ في إنشاء الحساب: {e}")
         return None
 
 def verify_login(username, password):
@@ -118,14 +118,16 @@ def verify_login(username, password):
             if user['password_hash'] == hash_password(password):
                 return user['user_id'], user['balance']
         return None, 0.0
-    except:
+    except Exception as e:
+        st.error(f"خطأ في تسجيل الدخول: {e}")
         return None, 0.0
 
 def get_user_transactions(user_id):
     try:
         response = supabase.table('transactions').select('*').eq('user_id', user_id).order('date', desc=True).execute()
         return response.data
-    except:
+    except Exception as e:
+        st.error(f"خطأ في جلب المعاملات: {e}")
         return []
 
 def add_transaction(user_id, trans_type, amount, description):
@@ -149,18 +151,17 @@ def add_transaction(user_id, trans_type, amount, description):
         st.session_state.balance = new_balance
         
         return True
-    except:
+    except Exception as e:
+        st.error(f"خطأ في إضافة المعاملة: {e}")
         return False
 
 def calculate_stats(transactions):
     total_income = sum(t['amount'] for t in transactions if t['type'] == 'دخل')
     total_expenses = sum(t['amount'] for t in transactions if t['type'] == 'مصروف')
-    net_income = total_income - total_expenses
     
     return {
         'total_income': total_income,
-        'total_expenses': total_expenses,
-        'net_income': net_income
+        'total_expenses': total_expenses
     }
 
 # شاشة التسجيل والدخول
@@ -219,47 +220,29 @@ def show_auth_screen():
 def show_main_app():
     st.markdown("<h1 class='main-title'>💰 مدير الميزانية البسيط</h1>", unsafe_allow_html=True)
     
-    # الرصيد الحالي
+    # الإحصائيات بجانب بعض
+    stats = calculate_stats(st.session_state.transactions)
+    
     st.markdown(f"""
-    <div class='balance-card'>
-        <h2>💳 الرصيد الحالي</h2>
-        <h1 style='color: {'#28a745' if st.session_state.balance >= 0 else '#dc3545'};'>
-            {st.session_state.balance:,.2f} د.ل
-        </h1>
-        <p>مرحباً بك {st.session_state.user_name}</p>
+    <div class='stats-container'>
+        <div class='stat-card'>
+            <h3>💳 الرصيد الحالي</h3>
+            <h2 style='color: {'#28a745' if st.session_state.balance >= 0 else '#dc3545'};'>
+                {st.session_state.balance:,.2f} د.ل
+            </h2>
+        </div>
+        <div class='stat-card'>
+            <h3>💰 إجمالي الدخل</h3>
+            <h2 style='color: #28a745;'>+{stats['total_income']:,.2f} د.ل</h2>
+        </div>
+        <div class='stat-card'>
+            <h3>💸 إجمالي المصروف</h3>
+            <h2 style='color: #dc3545;'>-{stats['total_expenses']:,.2f} د.ل</h2>
+        </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # الإحصائيات
-    if st.session_state.transactions:
-        stats = calculate_stats(st.session_state.transactions)
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown(f"""
-            <div class='stats-card'>
-                <h4>💰 إجمالي الدخل</h4>
-                <h3 style='color: #28a745;'>+{stats['total_income']:,.2f} د.ل</h3>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div class='stats-card'>
-                <h4>💸 إجمالي المصروف</h4>
-                <h3 style='color: #dc3545;'>-{stats['total_expenses']:,.2f} د.ل</h3>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            net_color = "#28a745" if stats['net_income'] >= 0 else "#dc3545"
-            st.markdown(f"""
-            <div class='stats-card'>
-                <h4>📊 صافي الدخل</h4>
-                <h3 style='color: {net_color};'>{stats['net_income']:,.2f} د.ل</h3>
-            </div>
-            """, unsafe_allow_html=True)
+    st.write(f"مرحباً بك **{st.session_state.user_name}**")
     
     # إضافة معاملة جديدة
     st.subheader("➕ إضافة معاملة جديدة")
