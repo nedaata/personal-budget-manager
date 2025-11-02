@@ -68,6 +68,14 @@ st.markdown("""
         border-radius: 5px;
         border-right: 4px solid #dc3545;
     }
+    .stats-card {
+        background: white;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        margin: 5px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -120,7 +128,7 @@ def get_user_transactions(user_id):
     except:
         return []
 
-def add_transaction(user_id, trans_type, amount, description, category):
+def add_transaction(user_id, trans_type, amount, description):
     try:
         # إضافة المعاملة
         transaction_data = {
@@ -129,7 +137,6 @@ def add_transaction(user_id, trans_type, amount, description, category):
             'type': trans_type,
             'amount': amount,
             'description': description,
-            'category': category,
             'date': datetime.now().isoformat()
         }
         supabase.table('transactions').insert(transaction_data).execute()
@@ -144,6 +151,17 @@ def add_transaction(user_id, trans_type, amount, description, category):
         return True
     except:
         return False
+
+def calculate_stats(transactions):
+    total_income = sum(t['amount'] for t in transactions if t['type'] == 'دخل')
+    total_expenses = sum(t['amount'] for t in transactions if t['type'] == 'مصروف')
+    net_income = total_income - total_expenses
+    
+    return {
+        'total_income': total_income,
+        'total_expenses': total_expenses,
+        'net_income': net_income
+    }
 
 # شاشة التسجيل والدخول
 def show_auth_screen():
@@ -212,7 +230,39 @@ def show_main_app():
     </div>
     """, unsafe_allow_html=True)
     
+    # الإحصائيات
+    if st.session_state.transactions:
+        stats = calculate_stats(st.session_state.transactions)
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.markdown(f"""
+            <div class='stats-card'>
+                <h4>💰 إجمالي الدخل</h4>
+                <h3 style='color: #28a745;'>+{stats['total_income']:,.2f} د.ل</h3>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div class='stats-card'>
+                <h4>💸 إجمالي المصروف</h4>
+                <h3 style='color: #dc3545;'>-{stats['total_expenses']:,.2f} د.ل</h3>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col3:
+            net_color = "#28a745" if stats['net_income'] >= 0 else "#dc3545"
+            st.markdown(f"""
+            <div class='stats-card'>
+                <h4>📊 صافي الدخل</h4>
+                <h3 style='color: {net_color};'>{stats['net_income']:,.2f} د.ل</h3>
+            </div>
+            """, unsafe_allow_html=True)
+    
     # إضافة معاملة جديدة
+    st.subheader("➕ إضافة معاملة جديدة")
     with st.form("add_transaction"):
         col1, col2 = st.columns(2)
         
@@ -221,21 +271,17 @@ def show_main_app():
             amount = st.number_input("المبلغ (د.ل):", min_value=0.0, step=100.0)
         
         with col2:
-            description = st.text_input("وصف المعاملة:")
-            category = st.selectbox("الفئة:", 
-                ["رواتب", "أخرى", "طعام", "مواصلات", "فواتير", "تسوق", "ترفيه"]
-            )
+            description = st.text_input("وصف المعاملة:", placeholder="مثال: راتب أو سوق")
         
         submit_btn = st.form_submit_button("إضافة المعاملة 💾")
         
         if submit_btn:
-            if amount > 0 and description:
+            if amount > 0 and description.strip():
                 success = add_transaction(
                     st.session_state.user_id,
                     "دخل" if trans_type == "دخل 💰" else "مصروف",
                     amount,
-                    description,
-                    category
+                    description.strip()
                 )
                 if success:
                     st.success("✅ تم إضافة المعاملة بنجاح!")
@@ -255,11 +301,15 @@ def show_main_app():
             trans_icon = "💰" if trans['type'] == 'دخل' else "💸"
             trans_sign = "+" if trans['type'] == 'دخل' else "-"
             
+            # تحويل التاريخ إلى تنسيق مقروء
+            date_obj = datetime.fromisoformat(trans['date'].replace('Z', '+00:00'))
+            formatted_date = date_obj.strftime("%Y-%m-%d %H:%M")
+            
             st.markdown(f"""
             <div class='{trans_class}'>
                 <strong>{trans_icon} {trans['description']}</strong>
                 <div style='display: flex; justify-content: space-between;'>
-                    <small>📅 {trans['date'][:16]} • 📁 {trans['category']}</small>
+                    <small>📅 {formatted_date}</small>
                     <strong>{trans_sign}{trans['amount']:,.2f} د.ل</strong>
                 </div>
             </div>
@@ -268,6 +318,7 @@ def show_main_app():
         st.info("📝 لا توجد معاملات حتى الآن. ابدأ بإضافة معاملاتك!")
     
     # تسجيل الخروج
+    st.markdown("---")
     if st.button("🚪 تسجيل الخروج", use_container_width=True):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
