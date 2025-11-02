@@ -8,27 +8,22 @@ import re
 st.set_page_config(
     page_title="مدير الميزانية - الدينار الليبي",
     page_icon="💵",
-    layout="wide",
-    initial_sidebar_state="collapsed"
+    layout="wide"
 )
 
-# تهيئة session state بشكل آمل
-def initialize_session_state():
-    required_keys = {
-        'current_user_id': None,
-        'user_data_loaded': False,
-        'login_attempts': 0,
-        'user_name': '',
-        'الرصيد': 0.0,
-        'المعاملات': []
-    }
-    
-    for key, default_value in required_keys.items():
-        if key not in st.session_state:
-            st.session_state[key] = default_value
-
-# استدعاء التهيئة
-initialize_session_state()
+# تهيئة session state
+if 'current_user_id' not in st.session_state:
+    st.session_state.current_user_id = None
+if 'user_data_loaded' not in st.session_state:
+    st.session_state.user_data_loaded = False
+if 'login_attempts' not in st.session_state:
+    st.session_state.login_attempts = 0
+if 'user_name' not in st.session_state:
+    st.session_state.user_name = ""
+if 'الرصيد' not in st.session_state:
+    st.session_state.الرصيد = 0.0
+if 'المعاملات' not in st.session_state:
+    st.session_state.المعاملات = []
 
 # محاولة تهيئة Supabase
 try:
@@ -75,10 +70,6 @@ st.markdown("""
         color: white;
         text-align: center;
     }
-    /* إصلاح مشكلة الـ widgets */
-    .stButton > button {
-        width: 100%;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -112,8 +103,7 @@ def check_username_available(user_name):
         user_id = create_user_id(user_name)
         response = supabase_client.table('users').select('user_id').eq('user_id', user_id).execute()
         return len(response.data) == 0
-    except Exception as e:
-        st.error(f"خطأ في التحقق من اسم المستخدم: {e}")
+    except:
         return False
 
 def get_user_data(user_id):
@@ -130,13 +120,7 @@ def get_user_data(user_id):
 def create_user_account(user_id, user_name, password_hash):
     """إنشاء حساب مستخدم جديد"""
     if not supabase_connected:
-        # في حالة عدم الاتصال، نستخدم التخزين المحلي
-        st.session_state.current_user_id = user_id
-        st.session_state.user_name = user_name
-        st.session_state.الرصيد = 0.0
-        st.session_state.المعاملات = []
-        st.session_state.user_data_loaded = True
-        return True
+        return False
     
     try:
         user_data = {
@@ -150,14 +134,6 @@ def create_user_account(user_id, user_name, password_hash):
         }
         
         response = supabase_client.table('users').insert(user_data).execute()
-        
-        # تهيئة الجلسة بعد إنشاء الحساب
-        st.session_state.current_user_id = user_id
-        st.session_state.user_name = user_name
-        st.session_state.الرصيد = 0.0
-        st.session_state.المعاملات = []
-        st.session_state.user_data_loaded = True
-        
         return True
     except Exception as e:
         st.error(f"خطأ في إنشاء الحساب: {e}")
@@ -166,7 +142,7 @@ def create_user_account(user_id, user_name, password_hash):
 def update_user_data(user_id, balance, transactions):
     """تحديث بيانات المستخدم"""
     if not supabase_connected:
-        return True  # في الوضع غير المتصل، نعتبر أن الحفظ ناجح
+        return False
     
     try:
         user_data = {
@@ -184,8 +160,7 @@ def update_user_data(user_id, balance, transactions):
 def verify_password(user_id, password):
     """التحقق من كلمة المرور"""
     if not supabase_connected:
-        # في الوضع غير المتصل، نتحقق من المستخدم المحلي
-        return st.session_state.current_user_id == user_id
+        return False
     
     user_data = get_user_data(user_id)
     if not user_data:
@@ -220,7 +195,7 @@ def show_login_screen():
         st.markdown("<div class='login-card'>", unsafe_allow_html=True)
         st.markdown("### 🆕 إنشاء حساب جديد")
         
-        with st.form("register_form", clear_on_submit=True):
+        with st.form("register_form"):
             new_username = st.text_input(
                 "اسم المستخدم الجديد:",
                 placeholder="اختر اسم مستخدم فريد...",
@@ -272,9 +247,7 @@ def show_login_screen():
                         
                         if success:
                             st.success("🎉 تم إنشاء حسابك بنجاح!")
-                            st.balloons()
-                            # استخدام st.rerun() بدلاً من st.experimental_rerun()
-                            st.rerun()
+                            st.info("💡 انتقل لتبويب 'تسجيل الدخول' وأدخل بياناتك للبدء")
                         else:
                             st.error("❌ فشل في إنشاء الحساب، حاول مرة أخرى")
     
@@ -282,7 +255,7 @@ def show_login_screen():
         st.markdown("<div class='login-card'>", unsafe_allow_html=True)
         st.markdown("### 🔐 تسجيل الدخول لحسابك")
         
-        with st.form("login_form", clear_on_submit=True):
+        with st.form("login_form"):
             username = st.text_input(
                 "اسم المستخدم:",
                 placeholder="أدخل اسم المستخدم..."
@@ -311,25 +284,19 @@ def show_login_screen():
                     # تسجيل الدخول الناجح
                     user_data = get_user_data(user_id)
                     
-                    if not user_data and supabase_connected:
+                    if not user_data:
                         st.error("❌ حساب غير موجود")
                     else:
                         # تهيئة الجلسة
                         st.session_state.current_user_id = user_id
-                        st.session_state.user_name = username.strip()
-                        
-                        if user_data:
-                            st.session_state.الرصيد = user_data.get('balance', 0.0)
-                            st.session_state.المعاملات = user_data.get('transactions', [])
-                        else:
-                            st.session_state.الرصيد = 0.0
-                            st.session_state.المعاملات = []
-                            
+                        st.session_state.user_name = user_data['user_name']
+                        st.session_state.الرصيد = user_data.get('balance', 0.0)
+                        st.session_state.المعاملات = user_data.get('transactions', [])
                         st.session_state.user_data_loaded = True
                         st.session_state.login_attempts = 0
                         
-                        st.success(f"✅ تم تسجيل الدخول بنجاح! أهلاً بك {username.strip()}")
-                        st.rerun()
+                        st.success(f"✅ تم تسجيل الدخول بنجاح! أهلاً بك {user_data['user_name']}")
+                        st.rerun()  # تم التغيير هنا
                 else:
                     st.session_state.login_attempts += 1
                     remaining_attempts = 5 - st.session_state.login_attempts
@@ -358,12 +325,12 @@ def show_main_app():
         st.markdown("### 💰 معاملة جديدة")
         
         with st.form("transaction_form", clear_on_submit=True):
-            نوع = st.radio("النوع:", ["دخل 💵", "مصروف 💰"], key="transaction_type")
-            مبلغ = st.number_input("المبلغ (دينار ليبي):", min_value=0.0, value=0.0, step=1000.0, key="transaction_amount")
-            وصف = st.text_input("وصف المعاملة:", placeholder="مثال: مرتب أو سوق", key="transaction_desc")
+            نوع = st.radio("النوع:", ["دخل 💵", "مصروف 💰"])
+            مبلغ = st.number_input("المبلغ (دينار ليبي):", min_value=0.0, value=0.0, step=1000.0)
+            وصف = st.text_input("وصف المعاملة:", placeholder="مثال: مرتب أو سوق")
             
             if نوع == "مصروف 💰":
-                فئة = st.selectbox("الفئة:", ["الطعام", "المواصلات", "الفواتير", "التسوق", "الترفيه", "الصحة", "أخرى"], key="transaction_category")
+                فئة = st.selectbox("الفئة:", ["الطعام", "المواصلات", "الفواتير", "التسوق", "الترفيه", "الصحة", "أخرى"])
             else:
                 فئة = "دخل"
             
@@ -390,33 +357,31 @@ def show_main_app():
                         st.success(f"✅ تم إضافة مصروف: {وصف} - {مبلغ:,.2f} د.ل")
                     
                     # حفظ البيانات
-                    if update_user_data(st.session_state.current_user_id, st.session_state.الرصيد, st.session_state.المعاملات):
-                        if supabase_connected:
+                    if supabase_connected:
+                        if update_user_data(st.session_state.current_user_id, st.session_state.الرصيد, st.session_state.المعاملات):
                             st.success("💾 تم حفظ البيانات في السحابة")
-                        else:
-                            st.info("💾 البيانات محفوظة محلياً")
                     
-                    st.rerun()
+                    st.rerun()  # تم التغيير هنا
                 else:
                     st.error("❌ يرجى إدخال المبلغ والوصف")
         
         st.markdown("---")
         st.markdown("### ⚙️ إدارة الحساب")
         
-        if st.button("🔄 مسح جميع بياناتي", use_container_width=True, key="clear_data"):
+        if st.button("🔄 مسح جميع بياناتي", use_container_width=True):
             st.session_state.المعاملات = []
             st.session_state.الرصيد = 0.0
-            if update_user_data(st.session_state.current_user_id, 0.0, []):
-                st.success("✅ تم مسح جميع بياناتك")
-            st.rerun()
+            if supabase_connected:
+                update_user_data(st.session_state.current_user_id, 0.0, [])
+            st.success("✅ تم مسح جميع بياناتك")
+            st.rerun()  # تم التغيير هنا
         
-        if st.button("🔐 تسجيل خروج", use_container_width=True, key="logout"):
-            # إعادة تعيين الجلسة بشكل آمن
+        if st.button("🔐 تسجيل خروج", use_container_width=True):
             for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            initialize_session_state()
+                if key not in ['login_attempts']:
+                    del st.session_state[key]
             st.success("✅ تم تسجيل الخروج بنجاح")
-            st.rerun()
+            st.rerun()  # تم التغيير هنا
 
     # الإحصائيات
     إجمالي_الدخل = sum(trans['المبلغ'] for trans in st.session_state.المعاملات if trans['النوع'] == 'دخل')
@@ -463,16 +428,10 @@ def show_main_app():
 
 def main():
     """الدالة الرئيسية"""
-    try:
-        if not st.session_state.user_data_loaded or not st.session_state.current_user_id:
-            show_login_screen()
-        else:
-            show_main_app()
-    except Exception as e:
-        st.error(f"حدث خطأ غير متوقع: {e}")
-        st.info("جاري إعادة تحميل التطبيق...")
-        initialize_session_state()
-        st.rerun()
+    if not st.session_state.user_data_loaded or not st.session_state.current_user_id:
+        show_login_screen()
+    else:
+        show_main_app()
 
 if __name__ == "__main__":
     main()
