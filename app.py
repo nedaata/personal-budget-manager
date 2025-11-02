@@ -313,6 +313,12 @@ def main():
         show_main_app()
     else:
         show_auth_screen()
-
+    # الشريط الجانبي
+    st.sidebar.title("🌐 التنقل")
+    
+    # زر للانتقال لتطبيق الباركود
+    if st.sidebar.button("📱 احصل على باركود التطبيق", use_container_width=True):
+        st.switch_page("barcode_app.py")
+    
 if __name__ == "__main__":
     main()
