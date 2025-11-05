@@ -7,7 +7,7 @@ from supabase import create_client, Client
 
 # إعداد الصفحة
 st.set_page_config(
-    page_title="مدير الميزانية الشخصية",
+    page_title="مدير الميزانيةالشخصية",
     page_icon="💵",
     layout="wide"
 )
@@ -315,5 +315,4 @@ def main():
         show_auth_screen()
    
 if __name__ == "__main__":
-
     main()
