@@ -166,7 +166,7 @@ def calculate_stats(transactions):
 
 # شاشة التسجيل والدخول
 def show_auth_screen():
-    st.markdown("<h1 class='main-title'>💰 مدير الميزانية البسيط</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-title'>💰 مدير الميزانية الشخصية</h1>", unsafe_allow_html=True)
     
     tab1, tab2 = st.tabs(["🔐 تسجيل الدخول", "🚀 إنشاء حساب"])
     
@@ -315,4 +315,5 @@ def main():
         show_auth_screen()
    
 if __name__ == "__main__":
+
     main()
